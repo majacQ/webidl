@@ -86,6 +86,7 @@ urlPrefix: https://tc39.github.io/ecma262/; spec: ECMA-262
         text: Set; url: sec-set-objects
         text: SharedArrayBuffer; url: sec-sharedarraybuffer-objects
         text: %AsyncIteratorPrototype%; url: sec-asynciteratorprototype
+        text: %ArrayBuffer%; url: sec-arraybuffer-constructor
         text: %Array.prototype%; url: sec-properties-of-the-array-prototype-object
         text: %Error.prototype%; url: sec-properties-of-the-error-prototype-object
         text: %Function.prototype%; url: sec-properties-of-the-function-prototype-object
@@ -116,6 +117,7 @@ urlPrefix: https://tc39.github.io/ecma262/; spec: ECMA-262
     type: argument
         text: NewTarget; url: sec-built-in-function-objects
     type: abstract-op
+        text: AllocateArrayBuffer; url: sec-allocatearraybuffer
         text: ArrayCreate; url: sec-arraycreate
         text: Call; url: sec-call
         text: CanonicalNumericIndexString; url: sec-canonicalnumericindexstring
@@ -140,6 +142,7 @@ urlPrefix: https://tc39.github.io/ecma262/; spec: ECMA-262
         text: GetFunctionRealm; url: sec-getfunctionrealm
         text: GetIterator; url: sec-getiterator
         text: GetMethod; url: sec-getmethod
+        text: GetValueFromBuffer; url: sec-getvaluefrombuffer
         text: IfAbruptRejectPromise; url: sec-ifabruptrejectpromise
         text: IsArray; url: sec-isarray
         text: IsAccessorDescriptor; url: sec-isaccessordescriptor
@@ -155,9 +158,10 @@ urlPrefix: https://tc39.github.io/ecma262/; spec: ECMA-262
         text: NewModuleEnvironment; url: sec-newmoduleenvironment
         text: NewPromiseCapability; url: sec-newpromisecapability
         text: NormalCompletion; url: sec-normalcompletion
-        text: OrdinaryObjectCreate; url: sec-ordinaryobjectcreate
+        text: OrdinaryCreateFromConstructor; sec: sec-ordinarycreatefromconstructor
         text: OrdinaryDefineOwnProperty; url: sec-ordinarydefineownproperty
         text: OrdinaryGetOwnProperty; url: sec-ordinarygetownproperty
+        text: OrdinaryObjectCreate; url: sec-ordinaryobjectcreate
         text: OrdinaryPreventExtensions; url: sec-ordinarypreventextensions
         text: OrdinarySetWithOwnDescriptor; url: sec-ordinarysetwithowndescriptor
         text: PerformPromiseThen; url: sec-performpromisethen
@@ -167,6 +171,7 @@ urlPrefix: https://tc39.github.io/ecma262/; spec: ECMA-262
         text: SetFunctionName; url: sec-setfunctionname
         text: SetImmutablePrototype; url: sec-set-immutable-prototype
         text: SetIntegrityLevel; url: sec-setintegritylevel
+        text: SetValueInBuffer; url: sec-setvalueinbuffer
         text: ToBigInt; url: #sec-tobigint
         text: ToBoolean; url: sec-toboolean
         text: ToInt32; url: sec-toint32
@@ -237,6 +242,10 @@ urlPrefix: https://tc39.github.io/ecma262/; spec: ECMA-262
         text: realm; url: realm
         text: ResolvedBinding Record; url: resolvedbinding-record
         text: running execution context; url: running-execution-context
+        text: element size; url: table-the-typedarray-constructors
+urlPrefix: https://tc39.es/proposal-resizablearraybuffer/; spec: RESIZABLE-BUFFERS-PROPOSAL
+    type: abstract-op
+        text: IsResizableArrayBuffer; url: sec-isresizablearraybuffer
 </pre>
 
 <style>
@@ -1220,7 +1229,7 @@ These [=constants=], [=regular operations=], [=regular attributes=], and [=strin
 describe the behaviors that can be implemented by an object,
 as if they were specified on the [=interface=] that [=includes=] them.
 
-[=Static attributes=], [=static operations=], [=special operations=] except for [=stringifiers=], and
+[=Static attributes=], [=static operations=], [=special operations=], and
 [=iterable declaration|iterable=], [=asynchronously iterable declaration|asynchronously iterable=],
 [=maplike declaration|maplike=], and [=setlike declarations=] cannot appear in [=interface mixin=]
 declarations.
@@ -1563,10 +1572,17 @@ and summarized in the following informative table:
             <td>●</td>
         </tr>
         <tr>
+            <th>[=Stringifiers=]</th>
+            <td>●</td>
+            <td></td>
+            <td>●</td>
+            <td></td>
+        </tr>
+        <tr>
             <th>[=Special Operations=]</th>
             <td>●</td>
             <td></td>
-            <td>Only [=stringifiers=]</td>
+            <td></td>
             <td></td>
         </tr>
         <tr>
@@ -2048,7 +2064,7 @@ are applicable only to regular attributes:
 An <dfn id="dfn-operation" export>operation</dfn> is an [=interface member=], [=callback interface
 member=] or [=namespace member=]
 (matching <emu-t>static</emu-t> <emu-nt><a href="#prod-RegularOperation">RegularOperation</a></emu-nt>,
-<emu-t>stringifier</emu-t> <emu-nt><a href="#prod-RegularOperation">RegularOperation</a></emu-nt>,
+<emu-t>stringifier</emu-t>,
 <emu-nt><a href="#prod-RegularOperation">RegularOperation</a></emu-nt> or
 <emu-nt><a href="#prod-SpecialOperation">SpecialOperation</a></emu-nt>)
 that defines a behavior that can be invoked on objects implementing the interface.
@@ -2702,6 +2718,122 @@ See [[#interface-object]] for details on how a [=constructor operation=] is to b
 <div data-fill-with="grammar-ArgumentNameKeyword"></div>
 
 
+<h4 id="idl-stringifiers">Stringifiers</h4>
+
+When an [=interface=] has a <dfn id="dfn-stringifier">stringifier</dfn>, it indicates that objects
+that implement the interface have a non-default conversion to a string.  Stringifiers can be
+specified using a <emu-t>stringifier</emu-t> keyword, which creates a stringifier operation when
+used alone.
+
+<pre highlight="webidl" class="syntax">
+    interface interface_identifier {
+      stringifier;
+    };
+</pre>
+
+Prose accompanying the interface must define
+the <dfn id="dfn-stringification-behavior" export>stringification behavior</dfn>
+of the interface.
+
+The <emu-t>stringifier</emu-t> keyword
+can also be placed on an [=attribute=].
+In this case, the string to convert the object to is the
+value of the attribute.  The <emu-t>stringifier</emu-t> keyword
+must not be placed on an attribute unless
+it is declared to be of type {{DOMString}} or {{USVString}}.
+It also must not be placed on
+a [=static attribute=].
+
+<pre highlight="webidl" class="syntax">
+    interface interface_identifier {
+      stringifier attribute DOMString identifier;
+    };
+</pre>
+
+On a given [=interface=], there must exist at most one stringifier.
+
+<pre class="grammar" id="prod-Stringifier">
+    Stringifier :
+        "stringifier" StringifierRest
+</pre>
+
+<pre class="grammar" id="prod-StringifierRest">
+    StringifierRest :
+        OptionalReadOnly AttributeRest
+        ";"
+</pre>
+
+<div class="example">
+
+    The following [=IDL fragment=]
+    defines an interface that will stringify to the value of its
+    <code class="idl">name</code> attribute:
+
+    <pre highlight="webidl">
+        [Exposed=Window]
+        interface Student {
+          constructor();
+          attribute unsigned long id;
+          stringifier attribute DOMString name;
+        };
+    </pre>
+
+    In the ECMAScript binding, using a <code class="idl">Student</code>
+    object in a context where a string is expected will result in the
+    value of the object’s <code class="idl">name</code> property being
+    used:
+
+    <pre highlight="js">
+        var s = new Student();
+        s.id = 12345678;
+        s.name = '周杰倫';
+
+        var greeting = 'Hello, ' + s + '!';  // Now greeting == 'Hello, 周杰倫!'.
+    </pre>
+
+    The following [=IDL fragment=]
+    defines an interface that has custom stringification behavior that is
+    not specified in the IDL itself.
+
+    <pre highlight="webidl">
+        [Exposed=Window]
+        interface Student {
+          constructor();
+          attribute unsigned long id;
+          attribute DOMString? familyName;
+          attribute DOMString givenName;
+
+          stringifier;
+        };
+    </pre>
+
+    Thus, prose is required to explain the stringification behavior.
+    We assume that the <code class="idl">familyName</code> and
+    <code class="idl">givenName</code> attributes are backed by
+    family name and given name concepts, respectively.
+
+    <blockquote>
+
+        The [=stringification behavior=] steps are:
+
+        1. If [=this=]'s family name is null, then return [=this=]'s given name.
+        2. Return the concatenation of [=this=]'s given name, followed by U+0020 SPACE, followed by [=this=]'s family name.
+
+    </blockquote>
+
+    An ECMAScript implementation of the IDL would behave as follows:
+
+    <pre highlight="js">
+        var s = new Student();
+        s.id = 12345679;
+        s.familyName = 'Smithee';
+        s.givenName = 'Alan';
+
+        var greeting = 'Hi ' + s;  // Now greeting == 'Hi Alan Smithee'.
+    </pre>
+</div>
+
+
 <h4 id="idl-special-operations">Special operations</h4>
 
 A <dfn id="dfn-special-operation" export>special operation</dfn> is a
@@ -2711,7 +2843,7 @@ Special operations are declared by using a
 <dfn id="dfn-special-keyword" export>special keyword</dfn>
 in an operation declaration.
 
-There are four kinds of special operations. The table below indicates
+There are three kinds of special operations. The table below indicates
 for a given kind of special operation what special keyword
 is used to declare it and what the purpose of the special operation is:
 
@@ -2736,11 +2868,6 @@ is used to declare it and what the purpose of the special operation is:
         <td><dfn id="dfn-deleter" export lt="deleter">Deleters</dfn></td>
         <td><emu-t>deleter</emu-t></td>
         <td>Defines behavior for when an object is indexed for property deletion.</td>
-    </tr>
-    <tr>
-        <td><dfn id="dfn-stringifier" export lt="stringifier">Stringifiers</dfn></td>
-        <td><emu-t>stringifier</emu-t></td>
-        <td>Defines how an object is converted into a {{DOMString}}.</td>
     </tr>
 </table>
 
@@ -2822,7 +2949,6 @@ for details.
 
 On a given [=interface=],
 there must exist at most one
-stringifier, at most one
 [=named property deleter=],
 and at most one of each variety of getter and setter.
 
@@ -2839,159 +2965,6 @@ be [=variadic=] nor have any
 If an object implements more than one [=interface=]
 that defines a given special operation, then it is undefined which (if any)
 special operation is invoked for that operation.
-
-
-<h5 id="idl-stringifiers">Stringifiers</h5>
-
-When an [=interface=] has a
-[=stringifier=], it indicates that objects that implement
-the interface have a non-default conversion to a string.  As mentioned above,
-stringifiers can be specified using an [=operation=]
-declared with the <emu-t>stringifier</emu-t> keyword.
-
-<pre highlight="webidl" class="syntax">
-    interface interface_identifier {
-      stringifier DOMString identifier();
-      stringifier DOMString ();
-    };
-</pre>
-
-If an operation used to declare a stringifier does not have an
-[=identifier=], then prose
-accompanying the interface must define
-the <dfn id="dfn-stringification-behavior" export>stringification behavior</dfn>
-of the interface.  If the operation does have an identifier,
-then the object is converted to a string by invoking the
-operation to obtain the string.
-
-Stringifiers declared with operations must
-be declared to take zero arguments and return a {{DOMString}}.
-
-As a shorthand, if the <emu-t>stringifier</emu-t> keyword
-is declared using an operation with no identifier, then the
-operation’s [=return type=] and
-argument list can be omitted.
-
-<pre highlight="webidl" class="syntax">
-    interface interface_identifier {
-      stringifier;
-    };
-</pre>
-
-<div class="example">
-
-    The following two interfaces are equivalent:
-
-    <pre highlight="webidl">
-        [Exposed=Window]
-        interface A {
-          stringifier DOMString ();
-        };
-    </pre>
-    <pre highlight="webidl">
-        [Exposed=Window]
-        interface A {
-          stringifier;
-        };
-    </pre>
-</div>
-
-The <emu-t>stringifier</emu-t> keyword
-can also be placed on an [=attribute=].
-In this case, the string to convert the object to is the
-value of the attribute.  The <emu-t>stringifier</emu-t> keyword
-must not be placed on an attribute unless
-it is declared to be of type {{DOMString}} or {{USVString}}.
-It also must not be placed on
-a [=static attribute=].
-
-<pre highlight="webidl" class="syntax">
-    interface interface_identifier {
-      stringifier attribute DOMString identifier;
-    };
-</pre>
-
-<pre class="grammar" id="prod-Stringifier">
-    Stringifier :
-        "stringifier" StringifierRest
-</pre>
-
-<pre class="grammar" id="prod-StringifierRest">
-    StringifierRest :
-        OptionalReadOnly AttributeRest
-        RegularOperation
-        ";"
-</pre>
-
-<div class="example">
-
-    The following [=IDL fragment=]
-    defines an interface that will stringify to the value of its
-    <code class="idl">name</code> attribute:
-
-    <pre highlight="webidl">
-        [Exposed=Window]
-        interface Student {
-          constructor();
-          attribute unsigned long id;
-          stringifier attribute DOMString name;
-        };
-    </pre>
-
-    In the ECMAScript binding, using a <code class="idl">Student</code>
-    object in a context where a string is expected will result in the
-    value of the object’s <code class="idl">name</code> property being
-    used:
-
-    <pre highlight="js">
-        var s = new Student();
-        s.id = 12345678;
-        s.name = '周杰倫';
-
-        var greeting = 'Hello, ' + s + '!';  // Now greeting == 'Hello, 周杰倫!'.
-    </pre>
-
-    The following [=IDL fragment=]
-    defines an interface that has custom stringification behavior that is
-    not specified in the IDL itself.
-
-    <pre highlight="webidl">
-        [Exposed=Window]
-        interface Student {
-          constructor();
-          attribute unsigned long id;
-          attribute DOMString? familyName;
-          attribute DOMString givenName;
-
-          stringifier DOMString ();
-        };
-    </pre>
-
-    Thus, prose is required to explain the stringification behavior.
-    We assume that the <code class="idl">familyName</code> and
-    <code class="idl">givenName</code> attributes are backed by
-    family name and given name concepts, respectively.
-
-    <blockquote>
-
-        The [=stringification behavior=] steps are:
-
-        1. If [=this=]'s family name is null, then return [=this=]'s given name.
-        2. Return the concatenation of [=this=]'s given name, followed by U+0020 SPACE, followed by [=this=]'s family name.
-
-    </blockquote>
-
-    An ECMAScript implementation of the IDL would behave as follows:
-
-    <pre highlight="js">
-        var s = new Student();
-        s.id = 12345679;
-        s.familyName = 'Smithee';
-        s.givenName = 'Alan';
-
-        var greeting = 'Hi ' + s;  // Now greeting == 'Hi Alan Smithee'.
-    </pre>
-</div>
 
 
 <h5 id="idl-indexed-properties" dfn export>Indexed properties</h5>
@@ -5746,7 +5719,9 @@ The <dfn id="dfn-typed-array-type" export>typed array types</dfn> are
 {{Uint16Array}},
 {{Uint32Array}},
 {{Uint8ClampedArray}},
-{{Float32Array}} and
+{{BigInt64Array}},
+{{BigUint64Array}},
+{{Float32Array}}, and
 {{Float64Array}}.
 
 The <dfn id="dfn-buffer-source-type" export>buffer source types</dfn>
@@ -6360,7 +6335,8 @@ character after an existing type.
 The [=nullable types/inner type=] must not be:
 
 *   {{any}},
-*   a [=Promise type=],
+*   a [=promise type=],
+*   an [=observable array type=],
 *   another nullable type, or
 *   a [=union type=] that itself [=includes a nullable type=]
     or has a dictionary type as one of its [=flattened member types=].
@@ -6637,6 +6613,7 @@ annotate are called <dfn export for="annotated types" lt="inner type">inner type
 </div>
 
 The following extended attributes are <dfn for="extended attributes">applicable to types</dfn>:
+[{{AllowResizable}}],
 [{{AllowShared}}],
 [{{Clamp}}],
 [{{EnforceRange}}], and
@@ -6749,22 +6726,21 @@ data.  The table below lists these types and the kind of buffer or view they rep
     <tr><th>Type</th><th>Kind of buffer</th></tr>
     <tr><td><dfn id="idl-ArrayBuffer" interface>ArrayBuffer</dfn></td><td>An object that holds a pointer (which may be null) to a buffer of a fixed number of bytes</td></tr>
     <tr><td><dfn id="idl-DataView" interface>DataView</dfn></td><td>A view on to an {{ArrayBuffer}} that allows typed access to integers and floating point values stored at arbitrary offsets into the buffer</td></tr>
-        <tr><td>
-            <dfn id="idl-Int8Array" interface>Int8Array</dfn>,<br/>
+    <tr><td><dfn id="idl-Int8Array" interface>Int8Array</dfn>,<br/>
             <dfn id="idl-Int16Array" interface>Int16Array</dfn>,<br/>
-        <dfn id="idl-Int32Array" interface>Int32Array</dfn></td>
-    <td>A view on to an {{ArrayBuffer}} that exposes it as an array of two’s complement signed integers of the given size in bits</td></tr>
-        <tr><td>
-            <dfn id="idl-Uint8Array" interface>Uint8Array</dfn>,<br/>
+            <dfn id="idl-Int32Array" interface>Int32Array</dfn>,<br/>
+            <dfn id="idl-BigInt64Array" interface>BigInt64Array</dfn></td>
+        <td>A view on to an {{ArrayBuffer}} that exposes it as an array of two’s complement signed integers of the given size in bits</td></tr>
+    <tr><td><dfn id="idl-Uint8Array" interface>Uint8Array</dfn>,<br/>
             <dfn id="idl-Uint16Array" interface>Uint16Array</dfn>,<br/>
-        <dfn id="idl-Uint32Array" interface>Uint32Array</dfn></td>
-    <td>A view on to an {{ArrayBuffer}} that exposes it as an array of unsigned integers of the given size in bits</td></tr>
-        <tr><td><dfn id="idl-Uint8ClampedArray" interface>Uint8ClampedArray</dfn></td>
-    <td>A view on to an {{ArrayBuffer}} that exposes it as an array of unsigned 8 bit integers with clamped conversions</td></tr>
-        <tr><td>
-            <dfn id="idl-Float32Array" interface>Float32Array</dfn>,<br/>
-        <dfn id="idl-Float64Array" interface>Float64Array</dfn></td>
-    <td>A view on to an {{ArrayBuffer}} that exposes it as an array of IEEE 754 floating point numbers of the given size in bits</td></tr>
+            <dfn id="idl-Uint32Array" interface>Uint32Array</dfn>,<br/>
+            <dfn id="idl-BigUint64Array" interface>BigUint64Array</dfn></td>
+        <td>A view on to an {{ArrayBuffer}} that exposes it as an array of unsigned integers of the given size in bits</td></tr>
+    <tr><td><dfn id="idl-Uint8ClampedArray" interface>Uint8ClampedArray</dfn></td>
+        <td>A view on to an {{ArrayBuffer}} that exposes it as an array of unsigned 8 bit integers with clamped conversions</td></tr>
+    <tr><td><dfn id="idl-Float32Array" interface>Float32Array</dfn>,<br/>
+            <dfn id="idl-Float64Array" interface>Float64Array</dfn></td>
+        <td>A view on to an {{ArrayBuffer}} that exposes it as an array of IEEE 754 floating point numbers of the given size in bits</td></tr>
 </table>
 
 Note: These types all correspond to classes defined in ECMAScript.
@@ -6774,51 +6750,9 @@ There is no way to represent a constant value of any of these types in IDL.
 The [=type name=] of all
 of these types is the name of the type itself.
 
-At the specification prose level, IDL [=buffer source types=]
-are simply references to objects.  To inspect or manipulate the bytes inside the buffer,
-specification prose must first either
-<dfn id="dfn-get-buffer-source-reference" export lt="get a reference to the buffer source">get a reference to the bytes held by the buffer source</dfn>
-or <dfn id="dfn-get-buffer-source-copy" export lt="get a copy of the buffer source">get a copy of the bytes held by the buffer source</dfn>.
-With a reference to the buffer source’s bytes, specification prose can get or set individual
-byte values using that reference.
-
-<div class="advisement">
-
-    Extreme care must be taken when writing specification text that gets a reference
-    to the bytes held by a buffer source, as the underlying data can easily be changed
-    by the script author or other APIs at unpredictable times.  If you are using a buffer source type
-    as an operation argument to obtain a chunk of binary data that will not be modified,
-    it is strongly recommended to get a copy of the buffer source’s bytes at the beginning
-    of the prose defining the operation.
-
-    Requiring prose to explicitly get a reference to or copy of the bytes is intended to
-    help specification reviewers look for problematic uses of these buffer source types.
-
-</div>
-
-<div class="note">
-
-    When designing APIs that take a buffer, it is recommended to use the
-    {{BufferSource}} typedef rather than {{ArrayBuffer}}
-    or any of the view types.
-
-    When designing APIs that create and return a buffer, it is recommended
-    to use the {{ArrayBuffer}} type rather than
-    {{Uint8Array}}.
-
-</div>
-
-Attempting to [=get a reference to the buffer source|get a reference to=] or
-[=get a copy of the buffer source|get a copy of the bytes held by a buffer source=]
-when the {{ArrayBuffer}} has been [=ArrayBuffer/detached=]
-will fail in a language binding-specific manner.
-
-Note: See [[#es-buffer-source-types]] below for
-how interacting with buffer source types works in the ECMAScript language binding.
-
-<p class="issue">
-    We should include an example of specification text that uses these types and terms.
-</p>
+At the specification prose level, IDL [=buffer source types=] are simply references to objects. To
+inspect or manipulate the bytes inside the buffer, specification prose needs to use the algorithms
+in [[#es-buffer-source-types]].
 
 <pre class="grammar" id="prod-BufferRelatedType">
     BufferRelatedType :
@@ -6831,6 +6765,8 @@ how interacting with buffer source types works in the ECMAScript language bindin
         "Uint16Array"
         "Uint32Array"
         "Uint8ClampedArray"
+        "BigInt64Array"
+        "BigUint64Array"
         "Float32Array"
         "Float64Array"
 </pre>
@@ -6858,21 +6794,22 @@ An <dfn id="dfn-observable-array-type" export>observable array type</dfn> is a p
 whose values are references to a combination of a mutable list of objects of type |T|, as well as
 behavior to perform when author code modifies the contents of the list.
 
-The parameterized type must not be a [=dictionary type=], [=sequence type=], or [=record type=].
+The parameterized type |T| must not be a [=dictionary type=], [=sequence type=], [=record type=],
+or [=observable array type=]. However, |T| may be nullable.
 
 Similar to [=sequence types=] and [=frozen array types=], observable array types wrap around
 ECMAScript array types, imposing additional semantics on their usage.
 
-Observable array types must only be used as the type of [=regular attributes=].
+Observable array types must only be used as the type of [=regular attributes=] defined on an [=interface=].
 
 For an attribute whose type is an observable array type, specification authors can specify a series
 of algorithms:
 
-*   <dfn for="observable array attribute">set an indexed value</dfn>, which accepts an IDL value
-    that is about to be set in the observable array, and the index at which it is being set;
-*   <dfn for="observable array attribute">delete an indexed value</dfn>, which accepts an IDL value
-    that is about to be removed from the observable array, and the index from which it is being
-    removed.
+*   <dfn export for="observable array attribute">set an indexed value</dfn>, which accepts an IDL
+    value that is about to be set in the observable array, and the index at which it is being set;
+*   <dfn export for="observable array attribute">delete an indexed value</dfn>, which accepts an
+    IDL value that is about to be removed from the observable array, and the index from which it is
+    being removed.
 
 Both of these algorithms are optional, and if not provided, the default behavior will be to do
 nothing. Either algorithm may throw an exception, e.g. to reject invalid values.
@@ -8923,10 +8860,34 @@ that correspond to the union’s [=member types=].
 <h4 id="es-buffer-source-types">Buffer source types</h4>
 
 Values of the IDL [=buffer source types=]
-are represented by objects of the corresponding ECMAScript class, with the additional restriction
-that unless the type is [=extended attributes associated with|associated with=] the
-[{{AllowShared}}] extended attribute, they can only be backed by ECMAScript
-{{ECMAScript/ArrayBuffer}} objects, and not {{ECMAScript/SharedArrayBuffer}} objects.
+are represented by objects of the corresponding ECMAScript class, with the following additional restrictions on those objects.
+
+<ul>
+    <li>
+        If the type is not [=extended attributes associated with|associated with=] either the
+        [{{AllowResizable}}] or [{{AllowShared}}] [=extended attribute=], they can only be backed by
+        ECMAScript {{ECMAScript/ArrayBuffer}} objects |V| for which <a
+        abstract-op>IsResizableArrayBuffer</a>(|V|) is false.
+    </li>
+    <li>
+        If the type is [=extended attributes associated with|associated with=] the
+        [{{AllowResizable}}] [=extended attribute=] but not with the [{{AllowShared}}] [=extended
+        attribute=], they can only be backed by ECMAScript {{ECMAScript/ArrayBuffer}} objects.
+    </li>
+    <li>
+        If the type is [=extended attributes associated with|associated with=] the [{{AllowShared}}]
+        [=extended attribute=] but not with the [{{AllowResizable}}] [=extended attribute=], they
+        can only be backed by ECMAScript {{ECMAScript/ArrayBuffer}} and ECMAScript
+        {{ECMAScript/SharedArrayBuffer}} objects |V| for which <a
+        abstract-op>IsResizableArrayBuffer</a>(|V|) is false.
+    </li>
+    <li>
+        If the type is [=extended attributes associated with|associated with=] both the
+        [{{AllowResizable}}] and the [{{AllowShared}}] [=extended attribute|extended attributes=],
+        they can be backed by any ECMAScript {{ECMAScript/ArrayBuffer}} or
+        {{ECMAScript/SharedArrayBuffer}} object.
+    </li>
+</ul>
 
 <div id="es-to-buffer-source" algorithm="convert an ECMAScript value to IDL ArrayBuffer">
 
@@ -8940,6 +8901,10 @@ that unless the type is [=extended attributes associated with|associated with=] 
         [=extended attributes associated with|associated with=] the [{{AllowShared}}]
         [=extended attribute=], and <a abstract-op>IsSharedArrayBuffer</a>(|V|) is true, then [=ECMAScript/throw=]
         a {{ECMAScript/TypeError}}.
+    1.  If the conversion is not to an IDL type
+        [=extended attributes associated with|associated with=] the [{{AllowResizable}}]
+        [=extended attribute=], and <a abstract-op>IsResizableArrayBuffer</a>(|V|) is true,
+        then [=ECMAScript/throw=] a {{ECMAScript/TypeError}}.
     1.  Return the IDL {{ArrayBuffer}} value that is a reference
         to the same object as |V|.
 </div>
@@ -8956,6 +8921,10 @@ that unless the type is [=extended attributes associated with|associated with=] 
         [=extended attributes associated with|associated with=] the [{{AllowShared}}]
         [=extended attribute=], and <a abstract-op>IsSharedArrayBuffer</a>(|V|.\[[ViewedArrayBuffer]]) is true,
         then [=ECMAScript/throw=] a {{ECMAScript/TypeError}}.
+    1.  If the conversion is not to an IDL type
+        [=extended attributes associated with|associated with=] the [{{AllowResizable}}]
+        [=extended attribute=], and <a abstract-op>IsResizableArrayBuffer</a>(|V|.\[[ViewedArrayBuffer]]) is true,
+        then [=ECMAScript/throw=] a {{ECMAScript/TypeError}}.
     1.  Return the IDL {{DataView}} value that is a reference
         to the same object as |V|.
 </div>
@@ -8971,6 +8940,8 @@ that unless the type is [=extended attributes associated with|associated with=] 
     {{Uint16Array}},
     {{Uint32Array}},
     {{Uint8ClampedArray}},
+    {{BigInt64Array}},
+    {{BigUint64Array}},
     {{Float32Array}} or
     {{Float64Array}} value
     by running the following algorithm:
@@ -8986,6 +8957,10 @@ that unless the type is [=extended attributes associated with|associated with=] 
         [=extended attributes associated with|associated with=] the [{{AllowShared}}]
         [=extended attribute=], and <a abstract-op>IsSharedArrayBuffer</a>(|V|.\[[ViewedArrayBuffer]]) is true,
         then [=ECMAScript/throw=] a {{ECMAScript/TypeError}}.
+    1.  If the conversion is not to an IDL type
+        [=extended attributes associated with|associated with=] the [{{AllowResizable}}]
+        [=extended attribute=], and <a abstract-op>IsResizableArrayBuffer</a>(|V|.\[[ViewedArrayBuffer]]) is true,
+        then [=ECMAScript/throw=] a {{ECMAScript/TypeError}}.
     1.  Return the IDL value of type |T| that is a reference to the same object as |V|.
 </div>
 
@@ -8994,37 +8969,178 @@ an IDL value of any [=buffer source type=]
 to an ECMAScript value is the Object value that represents
 a reference to the same object that the IDL value represents.
 
-<div algorithm="get a reference to a buffer source">
+<hr>
 
-    When [=get a reference to the buffer source|getting a reference to=]
-    or [=get a copy of the buffer source|getting a copy of the bytes held by a buffer source=]
-    that is an ECMAScript {{ECMAScript/ArrayBuffer}}, {{ECMAScript/DataView}}
-    or typed array object, these steps must be followed:
+<div algorithm>
+    To <dfn export for="ArrayBuffer">create</dfn> an {{ArrayBuffer}} from a [=byte sequence=]
+    |bytes| in a [=Realm=] |realm|:
 
-    1.  Let |O| be the ECMAScript object that is the buffer source.
-    1.  Initialize |arrayBuffer| to |O|.
-    1.  Initialize |offset| to 0.
-    1.  Initialize |length| to 0.
-    1.  If |O| has a \[[ViewedArrayBuffer]] [=internal slot=], then:
-        1.  Set |arrayBuffer| to the value of |O|’s \[[ViewedArrayBuffer]] [=internal slot=].
-        1.  Set |offset| to the value of |O|’s \[[ByteOffset]] [=internal slot=].
-        1.  Set |length| to the value of |O|’s \[[ByteLength]] [=internal slot=].
-    1.  Otherwise, set |length| to the value of |O|’s \[[ArrayBufferByteLength]] [=internal slot=].
-    1.  If <a abstract-op>IsDetachedBuffer</a>(|arrayBuffer|) is <emu-val>true</emu-val>, then
-        return the empty byte sequence.
-    1.  Let |data| be the value of |O|’s \[[ArrayBufferData]] [=internal slot=].
-    1.  Return a reference to or copy of (as required) the |length| bytes in |data|
-        starting at byte offset |offset|.
+    1.  Let |esArrayBuffer| be [=?=]
+        [$AllocateArrayBuffer$](|realm|.\[[Intrinsics]].[[{{%ArrayBuffer%}}]], |bytes|'s
+        [=byte sequence/length=]).
+    1.  Let |arrayBuffer| be the result of [=converted to an IDL value|converting=] |esArrayBuffer|
+        to an IDL value of type {{ArrayBuffer}}.
+    1.  [=ArrayBuffer/Write=] |bytes| into |arrayBuffer|.
+    1.  Return |arrayBuffer|.
 </div>
 
 <div algorithm>
+    To <dfn export for="ArrayBufferView">create</dfn> one of the {{ArrayBufferView}} types from a
+    [=byte sequence=] |bytes| in a [=Realm=] |realm|:
 
-    To <dfn id="dfn-detach" for="ArrayBuffer" export>detach</dfn> an {{ArrayBuffer}}, these steps must be followed:
-
-    1.  Let |O| be the ECMAScript object that is the {{ArrayBuffer}}.
-    1.  Perform [=!=] <a abstract-op>DetachArrayBuffer</a>(|O|).
+    1.  Assert: if the type is not {{DataView}}, then |bytes|'s [=byte sequence/length=] [=modulo=]
+        the [=element size=] of that type is 0.
+    1.  Let |arrayBuffer| be the result of [=ArrayBuffer/creating=] an {{ArrayBuffer}} from |bytes|
+        in |realm|.
+    1.  Let |esArrayBuffer| be the result of [=converted to an ECMAScript value|converting=]
+        |arrayBuffer| to an ECMAScript value.
+    1.  Let |constructor| be the appropriate constructor from |realm|.\[[Intrinsics]] for the type
+        of {{ArrayBufferView}} being created.
+    1.  Let |esView| be [=!=] [$Construct$](|constructor|, « |esArrayBuffer| »).
+    1.  Return the result of [=converted to an IDL value|converting=] |esView| into the given type.
 </div>
 
+<div algorithm>
+    To <dfn id="dfn-get-buffer-source-copy" export lt="get a copy of the buffer source|get a copy of the bytes held by the buffer source">get a copy of the bytes held by the buffer source</dfn>
+    given a {{BufferSource}} |bufferSource|:
+
+    1.  Let |esBufferSource| be be the result of [=converted to an ECMAScript value|converting=]
+        |bufferSource| to an ECMAScript value.
+    1.  Let |esArrayBuffer| be |esBufferSource|.
+    1.  Let |offset| be 0.
+    1.  Let |length| be 0.
+    1.  If |esBufferSource| has a \[[ViewedArrayBuffer]] [=internal slot=], then:
+        1.  Set |esArrayBuffer| to |esBufferSource|.\[[ViewedArrayBuffer]].
+        1.  Set |offset| to |esBufferSource|.\[[ByteOffset]].
+        1.  Set |length| to |esBufferSource|.\[[ByteLength]].
+    1.  Otherwise:
+        1.  Assert: |esBufferSource| is an {{ECMAScript/ArrayBuffer}} or
+            {{ECMAScript/SharedArrayBuffer}} object.
+        1.  Set |length| to |esBufferSource|.\[[ArrayBufferByteLength]].
+    1.  If [=!=] [$IsDetachedBuffer$](|esArrayBuffer|) is true, then return the empty
+        [=byte sequence=].
+    1.  Let |bytes| be a new [=byte sequence=] of [=byte sequence/length=] equal to |length|.
+    1.  For |i| in [=the range=] |offset| to |offset| + |length| &minus; 1, inclusive, set
+        |bytes|[|i| &minus; |offset|] to [=!=] [$GetValueFromBuffer$](|esArrayBuffer|, |i|, Uint8,
+        true, Unordered).
+    1.  Return |bytes|.
+</div>
+
+<div algorithm>
+    The <dfn export for="BufferSource">byte length</dfn> of a {{BufferSource}} |bufferSource| is
+    the value returned by the following steps:
+
+    1.  Let |esBufferSource| be be the result of [=converted to an ECMAScript value|converting=]
+        |bufferSource| to an ECMAScript value.
+    1.  If |esBufferSource| has a \[[ViewedArrayBuffer]] internal slot, then return
+        |esBufferSource|.\[[ByteLength]].
+    1.  Return |esBufferSource|.\[[ArrayBufferByteLength]].
+</div>
+
+<div algorithm>
+    The <dfn export for="BufferSource">underlying buffer</dfn> of a {{BufferSource}} |bufferSource|
+    is the value returned by the following steps:
+
+    1.  If |bufferSource| is an {{ArrayBuffer}}, return |bufferSource|.
+    1.  Let |esBufferSource| be be the result of [=converted to an ECMAScript value|converting=]
+        |bufferSource| to an ECMAScript value.
+    1.  Return the result of [=converted to an IDL value|converting=]
+        |esBufferSource|.\[[ViewedArrayBuffer]] to an IDL value of type {{ArrayBuffer}}.
+</div>
+
+<div algorithm="ArrayBuffer/write">
+    To <dfn export for="ArrayBuffer">write</dfn> a [=byte sequence=] |bytes| into an {{ArrayBuffer}}
+    |arrayBuffer|, optionally given a <dfn export for="ArrayBuffer/write">|startingOffset|</dfn>
+    (default 0):
+
+    1.  Let |esArrayBuffer| be be the result of [=converted to an ECMAScript value|converting=]
+        |arrayBuffer| to an ECMAScript value.
+    1.  Assert: |bytes|'s [=byte sequence/length=] ≤ |esArrayBuffer|.\[[ArrayBufferByteLength]]
+        &minus; |startingOffset|.
+    1.  For |i| in [=the range=] |startingOffset| to |startingOffset| + |bytes|'s [=byte
+        sequence/length=] &minus; 1, inclusive, perform [=!=] [$SetValueInBuffer$](|esArrayBuffer|,
+        |i|, Uint8, |bytes|[|i| - |startingOffset|], true, Unordered).
+</div>
+
+<div algorithm="ArrayBufferView/write">
+    To <dfn export for="ArrayBufferView">write</dfn> a [=byte sequence=] |bytes| into an
+    {{ArrayBufferView}} |view|, optionally given a
+    <dfn export for="ArrayBufferView/write">|startingOffset|</dfn> (default 0):
+
+    1.  Let |esView| be be the result of [=converted to an ECMAScript value|converting=] |view| to
+        an ECMAScript value.
+    1.  Assert: |bytes|'s [=byte sequence/length=] ≤ |esView|.\[[ByteLength]] &minus;
+        |startingOffset|.
+    1.  Assert: if |view| is not a {{DataView}}, then |bytes|'s [=byte sequence/length=] [=modulo=]
+        the [=element size=] of |view|'s type is 0.
+    1.  Let |arrayBuffer| be the result of [=converted to an IDL value|converting=]
+        |esView|.\[[ViewedArrayBuffer]] to an IDL value of type {{ArrayBuffer}}.
+    1.  [=ArrayBuffer/Write=] |bytes| into |arrayBuffer| with
+        <i>[=ArrayBuffer/write/startingOffset=]</i> set to |esView|.\[[ByteOffset]] +
+        |startingOffset|.
+</div>
+
+<div class="advisement">
+    Extreme care must be taken when writing specification text that
+    [=ArrayBuffer/writes=] into an {{ArrayBuffer}} or {{ArrayBufferView}}, as the underlying data
+    can easily be changed by the script author or other APIs at unpredictable times. This is
+    especially true if the [{{AllowShared}}] [=extended attribute=] is involved.
+
+    For the non-shared cases, a more recommended pattern is to [=ArrayBuffer/transfer=] the
+    {{ArrayBuffer}} first if possible, to ensure the writes cannot overlap with other modifications,
+    and then give the new {{ArrayBuffer}} instance to author code as necessary. Alternately, you can
+    [=get a copy of the bytes held by the buffer source=], modify those bytes, and then use them to
+    [=ArrayBuffer/create=] a new {{ArrayBuffer}} or {{ArrayBufferView}} to give back to author code.
+</div>
+
+<div algorithm>
+    To <dfn id="dfn-detach" for="ArrayBuffer" export>detach</dfn> an {{ArrayBuffer}} |arrayBuffer|:
+
+    1.  Let |esArrayBuffer| be be the result of [=converted to an ECMAScript value|converting=]
+        |arrayBuffer| to an ECMAScript value.
+    1.  Assert: [=!=] [$IsSharedArrayBuffer$](|esArrayBuffer|) is false.
+    1.  Perform [=?=] [$DetachArrayBuffer$](|esArrayBuffer|).
+
+    <p class="note">This will throw an exception if |esArrayBuffer| has an \[[ArrayBufferDetachKey]]
+    that is not undefined, such as is the case with the value of {{Memory|WebAssembly.Memory}}'s
+    {{Memory/buffer}} attribute. [[WASM-JS-API-1]]
+
+    <p class="note">Detaching a buffer that is already [=BufferSource/detached=] is a no-op.
+</div>
+
+<div algorithm>
+    A {{BufferSource}} |bufferSource| is <dfn for="BufferSource" export>detached</dfn> if the
+    following steps return true:
+
+    1.  Let |esArrayBuffer| be be the result of [=converted to an ECMAScript value|converting=]
+        |bufferSource| to an ECMAScript value.
+    1.  If |esArrayBuffer| has a \[[ViewedArrayBuffer]] internal slot, then set |esArrayBuffer| to
+        |esArrayBuffer|.\[[ViewedArrayBuffer]].
+    1.  Return [=!=] [$IsDetachedBuffer$](|esArrayBuffer|).
+</div>
+
+<div algorithm>
+    To <dfn for="ArrayBuffer" export>transfer</dfn> an {{ArrayBuffer}} |arrayBuffer|, optionally
+    given a [=Realm=] |targetRealm|:
+
+    1.  Let |esArrayBuffer| be be the result of [=converted to an ECMAScript value|converting=]
+        |arrayBuffer| to an ECMAScript value.
+    1.  Assert: [=!=] [$IsSharedArrayBuffer$](|esArrayBuffer|) is false.
+    1.  Assert: [=!=] [$IsDetachedBuffer$](|esArrayBuffer|) is false.
+    1.  Let |arrayBufferData| be |esArrayBuffer|.\[[ArrayBufferData]].
+    1.  Let |arrayBufferByteLength| be |esArrayBuffer|.\[[ArrayBufferByteLength]].
+    1.  Perform [=?=] [$DetachArrayBuffer$](|esArrayBuffer|).
+    1.  If |targetRealm| is not given, let |targetRealm| be the [=current Realm=].
+    1.  Let |esTransferred| be [=!=]
+        [$AllocateArrayBuffer$](|targetRealm|.\[[Intrinsics]].[[{{%ArrayBuffer%}}]], 0).
+    1.  Set |esTransferred|.\[[ArrayBufferData]] to |arrayBufferData|.
+    1.  Set |esTransferred|.\[[ArrayBufferByteLength]] to |arrayBufferByteLength|.
+    1.  Return the result of [=converted to an IDL value|converting=] |esTransferred| to an IDL
+        value of type {{ArrayBuffer}}.
+
+    <p class="note">This will throw an exception under the same circumstances as
+    [=ArrayBuffer/detaching=].
+</div>
 
 <h4 id="es-frozen-array">Frozen arrays — FrozenArray&lt;|T|&gt;</h4>
 
@@ -9105,6 +9221,27 @@ This section defines a number of
 whose presence affects the ECMAScript binding.
 
 
+<h4 id="AllowResizable" extended-attribute lt="AllowResizable">[AllowResizable]</h4>
+
+If the [{{AllowResizable}}] [=extended attribute=] appears on one of the [=buffer source types=] without the presence of the [{{AllowShared}}] [=extended attribute=], it
+creates a new IDL type that allows the buffer source type to be backed by an ECMAScript
+{{ECMAScript/ArrayBuffer}} that is resizable, instead of only by a fixed-length {{ECMAScript/ArrayBuffer}}.
+
+If the [{{AllowResizable}}] [=extended attribute=] and the [{{AllowShared}}] [=extended attribute=] both appear on one of the [=buffer source types=], it
+creates a new IDL type that allows the buffer source type to be additionally backed by an ECMAScript
+{{ECMAScript/SharedArrayBuffer}} that is growable.
+
+The [{{AllowResizable}}] extended attribute must [=takes no arguments|take no arguments=].
+
+A type that is not a [=buffer source type=] must not be
+[=extended attributes associated with|associated with=] the [{{AllowResizable}}] extended attribute.
+
+See the rules for converting ECMAScript values to IDL [=buffer source types=] in
+[[#es-buffer-source-types]] for the specific requirements that the use of [{{AllowResizable}}] entails.
+
+See the <a href="#example-allowresizable-allowshared">example</a> in [[#AllowShared]] for example usage of both [{{AllowResizable}}] and [{{AllowShared}}].
+
+
 <h4 id="AllowShared" extended-attribute lt="AllowShared">[AllowShared]</h4>
 
 If the [{{AllowShared}}] [=extended attribute=] appears on one of the [=buffer source types=], it
@@ -9119,22 +9256,43 @@ A type that is not a [=buffer source type=] must not be
 See the rules for converting ECMAScript values to IDL [=buffer source types=] in
 [[#es-buffer-source-types]] for the specific requirements that the use of [{{AllowShared}}] entails.
 
-<div class="example">
-    In the following [=IDL fragment=], one operation's argument uses the [{{AllowShared}}] extended
+<div class="example" id="example-allowresizable-allowshared">
+    In the following [=IDL fragment=], one operation's argument uses the [{{AllowResizable}}] extended
     attribute, while the other does not:
 
     <pre highlight="webidl">
         [Exposed=Window]
-        interface RenderingContext {
-          undefined readPixels(long width, long height, BufferSource pixels);
-          undefined readPixelsShared(long width, long height, [AllowShared] BufferSource pixels);
+        interface ExampleBufferFeature {
+          undefined writeInto(BufferSource dest);
+          undefined writeIntoResizable([AllowResizable] BufferSource dest);
+          undefined writeIntoShared([AllowShared] BufferSource dest);
+          undefined writeIntoSharedResizable([AllowResizable, AllowShared] BufferSource dest);
         };
     </pre>
 
-    With this definition, a call to <code>readPixels</code> with an {{ECMAScript/SharedArrayBuffer}}
-    instance, or any typed array or {{ECMAScript/DataView}} backed by one, will throw a
-    {{ECMAScript/TypeError}} exception. In contrast, a call to <code>readPixelsShared</code> will allow such
-    objects as input.
+    With this definition,
+    <ul>
+        <li>
+            A call to <code>writeInto</code> with a resizable {{ECMAScript/ArrayBuffer}} instance, a
+            {{ECMAScript/SharedArrayBuffer}} instance, or any typed array or {{ECMAScript/DataView}}
+            backed by either, will throw a {{ECMAScript/TypeError}} exception.
+       </li>
+        <li>
+            A call to <code>writeIntoResizable</code> with a {{ECMAScript/SharedArrayBuffer}}
+            instance, or any typed array or {{ECMAScript/DataView}} backed by one, will throw a
+            {{ECMAScript/TypeError}} exception.
+        </li>
+        <li>
+            A call to <code>writeIntoShared</code> with a resizable {{ECMAScript/ArrayBuffer}}
+            instance, a growable {{ECMAScript/SharedArrayBuffer}} instance, or any typed array or
+            {{ECMAScript/DataView}} backed by one, will throw a {{ECMAScript/TypeError}} exception.
+        </li>
+        <li>
+            A call to <code>writeIntoSharedResizable</code> will accept an
+            {{ECMAScript/ArrayBuffer}} instance, a {{ECMAScript/SharedArrayBuffer}} instance, or any
+            typed array or {{ECMAScript/DataView}} backed by either.
+        </li>
+    </ul>
 </div>
 
 
@@ -12162,7 +12320,7 @@ A [=regular operation=] that does not [=have default method steps=] must not be 
     </pre>
 </div>
 
-<h5 id="es-stringifier">Stringifiers</h5>
+<h4 id="es-stringifier">Stringifiers</h4>
 
 If the [=interface=] has an [=exposed=] [=stringifier=],
 then there must exist a property with the following characteristics:
@@ -12189,19 +12347,16 @@ then there must exist a property with the following characteristics:
         1.  If |O| does not [=implement=] the [=interface=]
             on which the stringifier was declared, then [=ECMAScript/throw=] a {{ECMAScript/TypeError}}.
         1.  Let |V| be an uninitialized variable.
-        1.  Depending on where <code>stringifier</code> was specified:
+        1.  Depending on how <code>stringifier</code> was specified:
             <dl class="switch">
+                 :  as a declaration
+                 :: Set |V| to the result of performing the [=stringification behavior=]
+                    of the interface.
                  :  on an [=attribute=]
                  :: Set |V| to the result of running the [=getter steps=] of the attribute
                     (or those listed in the [=getter steps=] of the inherited attribute, if this attribute is declared to
                     [=inherit its getter=]),
                     with |O| as [=this=].
-                 :  on an [=operation=] with an identifier
-                 :: Set |V| to the result of running the [=method steps=]
-                    of the operation, with |O| as [=this=] and an empty list as the argument values.
-                 :  on an [=operation=] with no identifier
-                 :: Set |V| to the result of performing the [=stringification behavior=]
-                    of the interface.
             </dl>
         1.  Return the result of [=converted to an ECMAScript value|converting=] |V| to a String value.
     </div>
@@ -14285,7 +14440,7 @@ A {{DOMException}} is represented by a
 
 <div algorithm="to create a simple exception or DOMException">
 
-    To [=create=] a [=simple exception=] or {{DOMException}} |E|, with a string giving the
+    To create a [=simple exception=] or {{DOMException}} |E|, with a string giving the
     [=error name=] |N| for the {{DOMException}} case and optionally a string giving a user
     agent-defined message |M|:
 
@@ -14442,6 +14597,7 @@ must support.
 <pre class="idl">
     typedef (Int8Array or Int16Array or Int32Array or
              Uint8Array or Uint16Array or Uint32Array or Uint8ClampedArray or
+             BigInt64Array or BigUint64Array or
              Float32Array or Float64Array or DataView) ArrayBufferView;
 </pre>
 
